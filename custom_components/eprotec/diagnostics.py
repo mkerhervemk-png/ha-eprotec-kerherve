@@ -1,4 +1,4 @@
-"""Diagnostic de l'intégration (structure des pages, sans identifiants)."""
+"""Diagnostic de l'intégration : infos techniques, sans identifiant ni mission."""
 
 from __future__ import annotations
 
@@ -12,4 +12,5 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry) -> dict
     return {
         "last_sync": (coordinator.data or {}).get("last_sync"),
         "last_error": coordinator.last_error,
+        "agenda": coordinator.agenda_info,
     }

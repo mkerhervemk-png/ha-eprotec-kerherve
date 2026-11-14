@@ -8,7 +8,8 @@ import re
 
 import aiohttp
 
-from .const import BASE_URL, PORTAL_HOST, REQUEST_TIMEOUT, USER_AGENT
+from .const import AGENDA_PAGE, BASE_URL, PORTAL_HOST, REQUEST_TIMEOUT, USER_AGENT
+from .parser import find_agenda_cid
 
 _FORM_RE = re.compile(r"<form\b[^>]*>", re.IGNORECASE)
 _ACTION_RE = re.compile(r"""action\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
@@ -64,6 +65,27 @@ class EProtecClient:
                 url, headers=self._headers, allow_redirects=True
             ) as resp:
                 return resp.status, await resp.text(), str(resp.url)
+
+    async def fetch_agenda(self) -> str:
+        """Retourne le flux iCal de l'agenda personnel (session déjà ouverte).
+
+        Lecture seule : deux GET, la page « Synchronisation » puis le flux.
+        """
+        try:
+            status, page, final_url = await self.fetch(BASE_URL + AGENDA_PAGE)
+            if PORTAL_HOST in final_url or status >= 400:
+                raise EProtecError("Page Synchronisation inaccessible")
+            cid = find_agenda_cid(page)
+            if not cid:
+                raise EProtecError("Lien d'agenda introuvable")
+            status, text, _ = await self.fetch(
+                f"{BASE_URL}evenements.php?cid={cid}&perso=1"
+            )
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise EProtecError(f"Agenda injoignable : {err}") from err
+        if status >= 400:
+            raise EProtecError(f"Agenda refusé (HTTP {status})")
+        return text
 
     async def login(self) -> tuple[str, str]:
         """Se connecte et retourne (HTML, URL) de la page d'accueil e-Protec.

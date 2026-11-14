@@ -7,7 +7,7 @@ Intégration Home Assistant non officielle pour e-Protec, l'espace bénévole de
 - **Lecture seule** : aucune inscription ni désinscription à une mission.
 - **1 connexion par compte et par 24 h**, à heure fixe, plus un bouton « Actualiser ».
 - **Aucune relance automatique** en cas d'échec de connexion.
-- Les dernières données sont conservées localement : un redémarrage de Home Assistant ne déclenche pas de nouvelle connexion si la dernière a moins de 24 h.
+- Les dernières données (60 jours passés et tout le futur) sont conservées localement : un redémarrage de Home Assistant ne déclenche pas de nouvelle connexion si la dernière a moins de 24 h.
 - Les identifiants restent dans Home Assistant et ne figurent jamais dans ce dépôt.
 
 ## Installation
@@ -17,17 +17,22 @@ Intégration Home Assistant non officielle pour e-Protec, l'espace bénévole de
 3. Paramètres → Appareils et services → Ajouter une intégration → « e-Protec ».
 4. Ajouter un compte par bénévole.
 
+## Fonctionnement
+
+Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvre la page « Synchronisation » d'e-Protec et lit l'agenda personnel au format iCal (la fonction officielle « Ajouter un calendrier par URL »). Trois requêtes en lecture, rien d'autre.
+
 ## Entités (par compte)
 
-| Entité | État en v0.1 |
+| Entité | Contenu |
 | --- | --- |
-| Connexion (ok / erreur / en_attente) | fonctionnel |
-| Dernière synchronisation | fonctionnel |
-| Bouton Actualiser | fonctionnel |
-| Missions à venir | « inconnu » jusqu'à la v0.2 |
-| Prochaine mission | « inconnu » jusqu'à la v0.2 |
+| Calendrier « Missions » | missions et activités de l'agenda personnel |
+| Prochaine mission | date de début, avec titre, lieu, description et fin en attributs |
+| Missions à venir | nombre, avec la liste en attribut |
+| Connexion | ok / erreur / en_attente |
+| Dernière synchronisation | horodatage |
+| Bouton Actualiser | synchronisation manuelle |
 
 ## Feuille de route
 
-- **v0.2** : lecture des pages « Calendrier » et « Événements » (missions, lieu, rôle), calendrier par bénévole.
-- **v0.3** : formations et échéances de recyclage.
+- Formations et échéances de recyclage.
+- Postes à pourvoir de la section.

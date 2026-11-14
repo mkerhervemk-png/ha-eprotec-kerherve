@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .entity import EProtecEntity
+from .parser import mission_bounds
 
 
 async def async_setup_entry(
@@ -29,17 +30,17 @@ async def async_setup_entry(
 
 
 def _missions(data: dict | None) -> list[dict] | None:
-    """Missions à venir triées, ou None si la lecture n'est pas disponible."""
+    """Missions à venir ou en cours, triées ; None si jamais synchronisé."""
     missions = (data or {}).get("missions")
     if missions is None:
         return None
     now = dt_util.utcnow()
     upcoming = []
     for mission in missions:
-        fin = dt_util.parse_datetime(mission.get("fin") or mission.get("debut") or "")
-        if fin is not None and dt_util.as_utc(fin) >= now:
-            upcoming.append(mission)
-    return sorted(upcoming, key=lambda m: m.get("debut") or "")
+        bounds = mission_bounds(mission, dt_util.DEFAULT_TIME_ZONE)
+        if bounds is not None and bounds[1] >= now:
+            upcoming.append((bounds[0], mission))
+    return [mission for _debut, mission in sorted(upcoming, key=lambda item: item[0])]
 
 
 class ConnexionSensor(EProtecEntity, SensorEntity):
@@ -112,7 +113,8 @@ class ProchaineMissionSensor(EProtecEntity, SensorEntity):
     @property
     def native_value(self) -> datetime | None:
         mission = self._next()
-        return dt_util.parse_datetime(mission.get("debut") or "") if mission else None
+        bounds = mission_bounds(mission, dt_util.DEFAULT_TIME_ZONE) if mission else None
+        return bounds[0] if bounds else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -120,6 +122,6 @@ class ProchaineMissionSensor(EProtecEntity, SensorEntity):
         return {
             "titre": mission.get("titre"),
             "lieu": mission.get("lieu"),
-            "role": mission.get("role"),
+            "description": mission.get("description"),
             "fin": mission.get("fin"),
         }

@@ -5,78 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 import zlib
 
-import voluptuous as vol
-from yarl import URL
-
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-    callback,
-)
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.event import async_track_time_change
 
 from .api import EProtecClient
-from .const import CONF_HEURE, DEFAULT_HEURE, DOMAIN, PORTAL_HOST
+from .const import CONF_HEURE, DEFAULT_HEURE, DOMAIN
 from .coordinator import EProtecCoordinator
-from .debug import page_slice, safe_url
 
-SERVICE_DEBUG_FETCH = "debug_fetch"
-DEBUG_SCHEMA = vol.Schema(
-    {
-        vol.Required("entry_id"): str,
-        vol.Required("path"): str,
-        vol.Optional("offset", default=0): vol.All(int, vol.Range(min=0)),
-        vol.Optional("length", default=8000): vol.All(int, vol.Range(min=1, max=20000)),
-        vol.Optional("links", default=False): bool,
-    }
-)
-
-
-def _register_debug_service(hass: HomeAssistant) -> None:
-    """Service de diagnostic temporaire (retiré en v0.2)."""
-    if hass.services.has_service(DOMAIN, SERVICE_DEBUG_FETCH):
-        return
-
-    async def _handle(call: ServiceCall) -> ServiceResponse:
-        entry = hass.config_entries.async_get_entry(call.data["entry_id"])
-        if (
-            entry is None
-            or entry.domain != DOMAIN
-            or entry.state is not ConfigEntryState.LOADED
-        ):
-            raise ServiceValidationError("Compte e-Protec introuvable")
-        try:
-            url = safe_url(call.data["path"])
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-        status, body, final_url = await entry.runtime_data.client.fetch(url)
-        if URL(final_url).host == PORTAL_HOST:
-            # Jamais de reconnexion cachée : seul le bouton Actualiser se connecte.
-            return {"error": "session_expiree"}
-        return page_slice(
-            body,
-            final_url,
-            status,
-            call.data["offset"],
-            call.data["length"],
-            call.data["links"],
-        )
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DEBUG_FETCH,
-        _handle,
-        schema=DEBUG_SCHEMA,
-        supports_response=SupportsResponse.ONLY,
-    )
-
-PLATFORMS = [Platform.BUTTON, Platform.SENSOR]
+PLATFORMS = [Platform.BUTTON, Platform.CALENDAR, Platform.SENSOR]
 
 type EProtecConfigEntry = ConfigEntry[EProtecCoordinator]
 
@@ -89,7 +28,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: EProtecConfigEntry) -> b
     coordinator = EProtecCoordinator(hass, entry, client)
     await coordinator.async_restore()
     entry.runtime_data = coordinator
-    _register_debug_service(hass)
 
     # Heure fixe + minute propre à chaque compte (les comptes ne se
     # connectent jamais à la même minute).
