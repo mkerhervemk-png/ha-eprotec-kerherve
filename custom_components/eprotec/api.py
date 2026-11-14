@@ -9,7 +9,7 @@ import re
 import aiohttp
 
 from .const import AGENDA_PAGE, BASE_URL, PORTAL_HOST, REQUEST_TIMEOUT, USER_AGENT
-from .parser import find_agenda_cid
+from .parser import find_agenda_cid, find_ical_export, find_person_id
 
 _FORM_RE = re.compile(r"<form\b[^>]*>", re.IGNORECASE)
 _ACTION_RE = re.compile(r"""action\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
@@ -18,6 +18,10 @@ _OTP_RE = re.compile(r"""name\s*=\s*["'](otp|totp)["']""", re.IGNORECASE)
 
 class EProtecError(Exception):
     """Erreur générique (réseau, page inattendue)."""
+
+    def __init__(self, message: str, trace: dict | None = None) -> None:
+        super().__init__(message)
+        self.trace = trace
 
 
 class EProtecAuthError(EProtecError):
@@ -66,26 +70,63 @@ class EProtecClient:
             ) as resp:
                 return resp.status, await resp.text(), str(resp.url)
 
-    async def fetch_agenda(self) -> str:
-        """Retourne le flux iCal de l'agenda personnel (session déjà ouverte).
+    async def fetch_agenda(self, landing: str) -> tuple[str, dict]:
+        """Retourne (flux iCal, trace technique) pour le bénévole connecté.
 
-        Lecture seule : deux GET, la page « Synchronisation » puis le flux.
+        Lecture seule, GET uniquement, dans la session déjà ouverte :
+        onglet « Liste » des participations, onglet « Synchronisation »,
+        puis le flux d'agenda.
         """
-        try:
-            status, page, final_url = await self.fetch(BASE_URL + AGENDA_PAGE)
-            if PORTAL_HOST in final_url or status >= 400:
-                raise EProtecError("Page Synchronisation inaccessible")
-            cid = find_agenda_cid(page)
-            if not cid:
-                raise EProtecError("Lien d'agenda introuvable")
-            status, text, _ = await self.fetch(
-                f"{BASE_URL}evenements.php?cid={cid}&perso=1"
+        trace: dict = {"etapes": [], "source": None}
+
+        async def _page(name: str, path: str) -> str:
+            status, body, final_url = await self.fetch(BASE_URL + path)
+            ok = status < 400 and PORTAL_HOST not in final_url
+            trace["etapes"].append(
+                {
+                    "page": name,
+                    "status": status,
+                    "taille": len(body),
+                    "hors_session": PORTAL_HOST in final_url,
+                    "lien_agenda": bool(find_agenda_cid(body)),
+                    "lien_export": bool(find_ical_export(body)),
+                }
             )
+            return body if ok else ""
+
+        try:
+            pid = find_person_id(landing)
+            trace["fiche_trouvee"] = bool(pid)
+            liste = ""
+            if pid:
+                liste = await _page(
+                    "liste",
+                    f"upd_personnel.php?from=inscriptions&tab=4&pompier={pid}"
+                    "&type_evenement=ALL",
+                )
+            sync = await _page("synchronisation", AGENDA_PAGE)
+            if pid and not find_agenda_cid(sync):
+                sync = await _page(
+                    "synchronisation_fiche", f"{AGENDA_PAGE}&pompier={pid}"
+                )
+
+            feed = None
+            if cid := find_agenda_cid(sync) or find_agenda_cid(liste):
+                feed = f"evenements.php?cid={cid}&perso=1"
+                trace["source"] = "agenda_personnel"
+            elif export := find_ical_export(liste):
+                feed = export
+                trace["source"] = "export_participations"
+            if feed is None:
+                raise EProtecError("Lien d'agenda introuvable", trace)
+
+            status, text, _ = await self.fetch(BASE_URL + feed)
         except (aiohttp.ClientError, TimeoutError) as err:
-            raise EProtecError(f"Agenda injoignable : {err}") from err
+            raise EProtecError(f"Agenda injoignable : {err}", trace) from err
+        trace["flux_status"] = status
         if status >= 400:
-            raise EProtecError(f"Agenda refusé (HTTP {status})")
-        return text
+            raise EProtecError(f"Agenda refusé (HTTP {status})", trace)
+        return text, trace
 
     async def login(self) -> tuple[str, str]:
         """Se connecte et retourne (HTML, URL) de la page d'accueil e-Protec.

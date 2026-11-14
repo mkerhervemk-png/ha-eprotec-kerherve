@@ -52,19 +52,21 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
 
     async def _async_update_data(self) -> dict:
         try:
-            await self.client.login()
-            agenda = await self.client.fetch_agenda()
+            landing, _url = await self.client.login()
+            agenda, trace = await self.client.fetch_agenda(landing)
         except EProtecAuthError as err:
             self.last_error = str(err)
             raise ConfigEntryAuthFailed(str(err)) from err
         except EProtecError as err:
             self.last_error = str(err)
+            self.agenda_info = {"trace": err.trace}
             raise UpdateFailed(str(err)) from err
 
         self.last_error = None
         missions, self.agenda_info = parse_ical(
             agenda, dt_util.DEFAULT_TIME_ZONE, dt_util.utcnow()
         )
+        self.agenda_info["trace"] = trace
         if not self.agenda_info["est_un_calendrier"]:
             self.last_error = "Réponse d'agenda inattendue"
             raise UpdateFailed(self.last_error)

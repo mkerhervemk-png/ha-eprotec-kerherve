@@ -8,7 +8,23 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 _CID_RE = re.compile(r"evenements\.php\?cid=([0-9a-fA-F]{8,64})")
 _UNESCAPE_RE = re.compile(r"\\([\;,nN])")
+_PID_RE = re.compile(r"pompier=(\d+)")
+_ICAL_RE = re.compile(r"evenement_ical\.php\?pid=(\d+)&(?:amp;)?section=(\d+)")
 KEEP_PAST_DAYS = 60
+
+
+def find_person_id(page: str) -> str | None:
+    """Numéro de fiche du bénévole connecté (le plus fréquent dans l'accueil)."""
+    ids = _PID_RE.findall(page)
+    return max(set(ids), key=ids.count) if ids else None
+
+
+def find_ical_export(page: str) -> str | None:
+    """Lien d'export iCal de l'onglet « Liste » des participations."""
+    match = _ICAL_RE.search(page)
+    if not match:
+        return None
+    return f"evenement_ical.php?pid={match.group(1)}&section={match.group(2)}"
 
 
 def find_agenda_cid(page: str) -> str | None:
