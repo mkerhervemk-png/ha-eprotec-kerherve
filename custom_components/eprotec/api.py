@@ -50,24 +50,32 @@ class EProtecClient:
         self._password = password
         self._headers = {"User-Agent": USER_AGENT}
 
-    async def _get(self, url: str) -> tuple[str, str]:
+    async def _get(self, url: str) -> tuple[str, str, str]:
         async with self._session.get(
             url, headers=self._headers, allow_redirects=True
         ) as resp:
             resp.raise_for_status()
-            return await resp.text(), resp.url.host or ""
+            return await resp.text(), resp.url.host or "", str(resp.url)
 
-    async def login(self) -> str:
-        """Se connecte et retourne le HTML de la page d'accueil e-Protec.
+    async def fetch(self, url: str) -> tuple[int, str, str]:
+        """Lit une page (GET uniquement) dans la session en cours."""
+        async with asyncio.timeout(REQUEST_TIMEOUT):
+            async with self._session.get(
+                url, headers=self._headers, allow_redirects=True
+            ) as resp:
+                return resp.status, await resp.text(), str(resp.url)
+
+    async def login(self) -> tuple[str, str]:
+        """Se connecte et retourne (HTML, URL) de la page d'accueil e-Protec.
 
         Une seule tentative : aucune relance automatique en cas d'échec.
         """
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
-                page, host = await self._get(BASE_URL)
+                page, host, final_url = await self._get(BASE_URL)
                 if host != PORTAL_HOST:
                     # Session encore valide : pas de nouvelle authentification.
-                    return page
+                    return page, final_url
 
                 action = _find_login_action(page)
                 if not action:
@@ -85,12 +93,13 @@ class EProtecClient:
                 ) as resp:
                     page = await resp.text()
                     host = resp.url.host or ""
+                    final_url = str(resp.url)
                     status = resp.status
         except (aiohttp.ClientError, TimeoutError) as err:
             raise EProtecError(f"Portail injoignable : {err}") from err
 
         if host != PORTAL_HOST and status < 400:
-            return page
+            return page, final_url
         if _OTP_RE.search(page):
             raise EProtecMfaRequired("Le portail demande un code de vérification")
         if host == PORTAL_HOST:

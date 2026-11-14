@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import EProtecAuthError, EProtecClient, EProtecError
 from .const import DOMAIN, MIN_INTERVAL_HOURS
+from .debug import collect_debug
 from .parser import parse_missions
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
         )
         self.client = client
         self.last_error: str | None = None
+        # Mode diagnostic temporaire (v0.1.1) : en mémoire uniquement.
+        self.debug: dict | None = None
         self._store: Store[dict] = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}")
 
     async def async_restore(self) -> None:
@@ -51,7 +54,7 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
 
     async def _async_update_data(self) -> dict:
         try:
-            page = await self.client.login()
+            page, url = await self.client.login()
         except EProtecAuthError as err:
             self.last_error = str(err)
             raise ConfigEntryAuthFailed(str(err)) from err
@@ -60,6 +63,7 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
             raise UpdateFailed(str(err)) from err
 
         self.last_error = None
+        self.debug = await collect_debug(self.client, page, url)
         data = {
             "last_sync": dt_util.utcnow().isoformat(),
             "missions": parse_missions(page),
