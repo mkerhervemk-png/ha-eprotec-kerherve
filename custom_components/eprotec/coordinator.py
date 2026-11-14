@@ -12,6 +12,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .accueil import parse_accueil
 from .api import EProtecAuthError, EProtecClient, EProtecError
 from .const import DOMAIN, MIN_INTERVAL_HOURS
 from .parser import parse_ical, parse_planning
@@ -83,10 +84,19 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
             except EProtecError as err:
                 self.agenda_info["planning"] = {"erreur": str(err)}
 
+        # Page d'accueil : facultative elle aussi.
+        accueil = (self.data or {}).get("accueil")
+        try:
+            accueil, info = parse_accueil(landing)
+            self.agenda_info["accueil"] = info
+        except Exception as err:  # noqa: BLE001 - ne doit jamais bloquer l'agenda
+            self.agenda_info["accueil"] = {"erreur": repr(err)[:200]}
+
         data = {
             "last_sync": dt_util.utcnow().isoformat(),
             "missions": missions,
             "planning": planning,
+            "accueil": accueil,
         }
         await self._store.async_save(data)
         return data

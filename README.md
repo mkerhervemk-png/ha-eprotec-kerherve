@@ -29,10 +29,17 @@ Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvr
 | Prochaine mission | date de début, avec titre, lieu, description et fin en attributs |
 | Missions à venir | nombre, avec la liste en attribut |
 | Postes à pourvoir | activités à venir de l'antenne où il reste des places, avec la liste en attribut |
+| Calendrier « Activités antenne » | toutes les activités de l'antenne, avec inscrits/places |
+| Anniversaires du jour | nombre, noms en attribut |
+| Mes participations, Activité de l'antenne | compteurs de l'accueil |
+| Heures de formation | heures de l'année en cours |
+| Consigne opérationnelle, Actualité | dernier message, date et texte en attributs |
+| Veille opérationnelle | personnes d'astreinte (noms et rôle, sans téléphone) |
+| Remplacements, Mes activités, Main courante | nombre d'éléments |
 | Connexion | ok / erreur / en_attente |
 | Dernière synchronisation | horodatage |
 | Bouton Actualiser | synchronisation manuelle |
 
 ## Feuille de route
 
-- Formations et échéances de recyclage.
+- Compétences et échéances de recyclage.

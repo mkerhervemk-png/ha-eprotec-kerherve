@@ -49,6 +49,14 @@ def _find_login_action(page: str) -> str | None:
     return None
 
 
+def _decode(raw: bytes) -> str:
+    """e-Protec sert certaines pages en windows-1252."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
 class EProtecClient:
     """Une instance par compte, avec sa propre session (cookies séparés)."""
 
@@ -65,7 +73,7 @@ class EProtecClient:
             url, headers=self._headers, allow_redirects=True
         ) as resp:
             resp.raise_for_status()
-            return await resp.text(), resp.url.host or "", str(resp.url)
+            return _decode(await resp.read()), resp.url.host or "", str(resp.url)
 
     async def fetch(self, url: str) -> tuple[int, str, str]:
         """Lit une page (GET uniquement) dans la session en cours."""
@@ -73,13 +81,7 @@ class EProtecClient:
             async with self._session.get(
                 url, headers=self._headers, allow_redirects=True
             ) as resp:
-                raw = await resp.read()
-                # e-Protec sert certaines pages en windows-1252.
-                try:
-                    body = raw.decode("utf-8")
-                except UnicodeDecodeError:
-                    body = raw.decode("cp1252", errors="replace")
-                return resp.status, body, str(resp.url)
+                return resp.status, _decode(await resp.read()), str(resp.url)
 
     async def fetch_agenda(self, landing: str) -> tuple[str, dict]:
         """Retourne (flux iCal, trace technique) pour le bénévole connecté.
@@ -188,7 +190,7 @@ class EProtecClient:
                     },
                     allow_redirects=True,
                 ) as resp:
-                    page = await resp.text()
+                    page = _decode(await resp.read())
                     host = resp.url.host or ""
                     final_url = str(resp.url)
                     status = resp.status
