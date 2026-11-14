@@ -14,7 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import EProtecAuthError, EProtecClient, EProtecError
 from .const import DOMAIN, MIN_INTERVAL_HOURS
-from .parser import parse_ical
+from .parser import parse_ical, parse_planning
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,9 +70,23 @@ class EProtecCoordinator(DataUpdateCoordinator[dict]):
         if not self.agenda_info["est_un_calendrier"]:
             self.last_error = "Réponse d'agenda inattendue"
             raise UpdateFailed(self.last_error)
+
+        # Planning de l'antenne : facultatif, un échec ne bloque pas l'agenda.
+        planning = (self.data or {}).get("planning")
+        if section := trace.get("section"):
+            try:
+                planning_text = await self.client.fetch_planning(section)
+                parsed, info = parse_planning(planning_text, dt_util.DEFAULT_TIME_ZONE)
+                self.agenda_info["planning"] = info
+                if parsed is not None:
+                    planning = parsed
+            except EProtecError as err:
+                self.agenda_info["planning"] = {"erreur": str(err)}
+
         data = {
             "last_sync": dt_util.utcnow().isoformat(),
             "missions": missions,
+            "planning": planning,
         }
         await self._store.async_save(data)
         return data

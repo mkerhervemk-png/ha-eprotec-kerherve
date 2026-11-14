@@ -19,7 +19,7 @@ Intégration Home Assistant non officielle pour e-Protec, l'espace bénévole de
 
 ## Fonctionnement
 
-Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvre la page « Synchronisation » d'e-Protec et lit l'agenda personnel au format iCal (la fonction officielle « Ajouter un calendrier par URL »). Trois requêtes en lecture, rien d'autre.
+Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvre la page « Synchronisation » d'e-Protec et lit l'agenda personnel au format iCal (la fonction officielle « Ajouter un calendrier par URL »). Elle lit ensuite le planning de l'antenne pour compter les places restantes. Quelques requêtes en lecture, rien d'autre.
 
 ## Entités (par compte)
 
@@ -28,6 +28,7 @@ Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvr
 | Calendrier « Missions » | missions et activités de l'agenda personnel |
 | Prochaine mission | date de début, avec titre, lieu, description et fin en attributs |
 | Missions à venir | nombre, avec la liste en attribut |
+| Postes à pourvoir | activités à venir de l'antenne où il reste des places, avec la liste en attribut |
 | Connexion | ok / erreur / en_attente |
 | Dernière synchronisation | horodatage |
 | Bouton Actualiser | synchronisation manuelle |
@@ -35,4 +36,3 @@ Une fois par jour, l'intégration se connecte au Portail Protection Civile, ouvr
 ## Feuille de route
 
 - Formations et échéances de recyclage.
-- Postes à pourvoir de la section.

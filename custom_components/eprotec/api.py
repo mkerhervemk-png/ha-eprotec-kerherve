@@ -9,7 +9,12 @@ import re
 import aiohttp
 
 from .const import AGENDA_PAGE, BASE_URL, PORTAL_HOST, REQUEST_TIMEOUT, USER_AGENT
-from .parser import find_agenda_cid, find_ical_export, find_person_id
+from .parser import (
+    find_agenda_cid,
+    find_ical_export,
+    find_person_id,
+    find_section_id,
+)
 
 _FORM_RE = re.compile(r"<form\b[^>]*>", re.IGNORECASE)
 _ACTION_RE = re.compile(r"""action\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
@@ -68,7 +73,13 @@ class EProtecClient:
             async with self._session.get(
                 url, headers=self._headers, allow_redirects=True
             ) as resp:
-                return resp.status, await resp.text(), str(resp.url)
+                raw = await resp.read()
+                # e-Protec sert certaines pages en windows-1252.
+                try:
+                    body = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    body = raw.decode("cp1252", errors="replace")
+                return resp.status, body, str(resp.url)
 
     async def fetch_agenda(self, landing: str) -> tuple[str, dict]:
         """Retourne (flux iCal, trace technique) pour le bénévole connecté.
@@ -104,6 +115,7 @@ class EProtecClient:
                     f"upd_personnel.php?from=inscriptions&tab=4&pompier={pid}"
                     "&type_evenement=ALL",
                 )
+                trace["section"] = find_section_id(liste)
             sync = await _page("synchronisation", AGENDA_PAGE)
             if pid and not find_agenda_cid(sync):
                 sync = await _page(
@@ -127,6 +139,28 @@ class EProtecClient:
         if status >= 400:
             raise EProtecError(f"Agenda refusé (HTTP {status})", trace)
         return text, trace
+
+    async def fetch_planning(self, section: str) -> str:
+        """Planning de l'antenne (lecture seule, deux GET).
+
+        La première page règle le filtre « toutes activités de l'antenne »
+        côté serveur, la seconde renvoie la liste.
+        """
+        try:
+            status, _body, final_url = await self.fetch(
+                f"{BASE_URL}evenement_choice.php?type_evenement=ALL&filter={section}"
+            )
+            if status >= 400 or PORTAL_HOST in final_url:
+                raise EProtecError("Planning inaccessible")
+            status, text, _ = await self.fetch(
+                f"{BASE_URL}evenement_choice_load.php"
+                "?data=1&search=&sort=&order=&offset=0&limit=500"
+            )
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise EProtecError(f"Planning injoignable : {err}") from err
+        if status >= 400:
+            raise EProtecError(f"Planning refusé (HTTP {status})")
+        return text
 
     async def login(self) -> tuple[str, str]:
         """Se connecte et retourne (HTML, URL) de la page d'accueil e-Protec.

@@ -25,6 +25,7 @@ async def async_setup_entry(
             DerniereSynchroSensor(coordinator),
             MissionsAVenirSensor(coordinator),
             ProchaineMissionSensor(coordinator),
+            PostesAPourvoirSensor(coordinator),
         ]
     )
 
@@ -124,4 +125,55 @@ class ProchaineMissionSensor(EProtecEntity, SensorEntity):
             "lieu": mission.get("lieu"),
             "description": mission.get("description"),
             "fin": mission.get("fin"),
+        }
+
+
+class PostesAPourvoirSensor(EProtecEntity, SensorEntity):
+    """Activités à venir de l'antenne où il reste des places."""
+
+    _attr_name = "Postes à pourvoir"
+    _attr_icon = "mdi:account-plus"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "postes_a_pourvoir")
+
+    def _open(self) -> list[dict] | None:
+        planning = (self.coordinator.data or {}).get("planning")
+        if planning is None:
+            return None
+        now = dt_util.utcnow()
+        result = []
+        for activite in planning:
+            bounds = mission_bounds(activite, dt_util.DEFAULT_TIME_ZONE)
+            if bounds is None or bounds[1] < now:
+                continue
+            inscrits, places = activite.get("inscrits"), activite.get("places")
+            if inscrits is None or places is None or inscrits >= places:
+                continue
+            result.append(
+                {
+                    "id": activite.get("id"),
+                    "titre": activite.get("titre"),
+                    "type": activite.get("type"),
+                    "lieu": activite.get("lieu"),
+                    "debut": activite.get("debut"),
+                    "fin": activite.get("fin"),
+                    "inscrits": inscrits,
+                    "places": places,
+                    "places_restantes": places - inscrits,
+                }
+            )
+        return result
+
+    @property
+    def native_value(self) -> int | None:
+        postes = self._open()
+        return None if postes is None else len(postes)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        postes = self._open() or []
+        return {
+            "postes": postes[:25],
+            "places_restantes_total": sum(p["places_restantes"] for p in postes),
         }
