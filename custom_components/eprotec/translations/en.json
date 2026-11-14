@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Compte e-Protec",
+        "description": "Un compte par bénévole. Lecture seule, une connexion par 24 h.",
+        "data": {
+          "prenom": "Prénom",
+          "username": "Identifiant du Portail Protection Civile",
+          "password": "Mot de passe",
+          "heure": "Heure de l'actualisation quotidienne (0-23)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Mot de passe e-Protec refusé",
+        "description": "Saisis le mot de passe actuel du compte.",
+        "data": {
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Identifiant ou mot de passe refusé.",
+      "mfa_required": "Le portail demande un code de vérification : connexion automatique impossible.",
+      "cannot_connect": "Portail injoignable ou page inattendue."
+    },
+    "abort": {
+      "already_configured": "Ce compte est déjà configuré.",
+      "reauth_successful": "Mot de passe mis à jour."
+    }
+  }
+}
