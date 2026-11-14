@@ -12,5 +12,4 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry) -> dict
     return {
         "last_sync": (coordinator.data or {}).get("last_sync"),
         "last_error": coordinator.last_error,
-        "debug": coordinator.debug,
     }

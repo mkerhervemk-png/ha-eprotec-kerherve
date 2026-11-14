@@ -1,51 +1,64 @@
-"""Mode diagnostic temporaire (v0.1.1).
+"""Outil de diagnostic temporaire (v0.1.2), à retirer en v0.2.
 
-Relève la structure des pages e-Protec (menu, Calendrier, Événements) pour
-écrire la lecture des missions. GET uniquement, même session que
-l'actualisation, données gardées en mémoire (jamais écrites sur disque).
-À retirer en v0.2.
+Service eprotec.debug_fetch : lit UNE page e-Protec dans la session déjà
+ouverte (aucune nouvelle connexion), en GET uniquement, sur une liste
+fermée de pages de consultation. Rien n'est écrit sur disque.
 """
 
 from __future__ import annotations
 
 import html as html_lib
-import logging
 import re
 
 from yarl import URL
 
-_LOGGER = logging.getLogger(__name__)
+from .const import BASE_URL
 
 _SCRIPT_RE = re.compile(r"<(script|style|svg)\b.*?</\1>", re.IGNORECASE | re.DOTALL)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEAD_RE = re.compile(r"<head\b.*?</head>", re.IGNORECASE | re.DOTALL)
+_STYLE_ATTR_RE = re.compile(r"""\sstyle\s*=\s*("[^"]*"|'[^']*')""", re.IGNORECASE)
 _A_RE = re.compile(r"<a\b([^>]*)>(.*?)</a>", re.IGNORECASE | re.DOTALL)
 _HREF_RE = re.compile(r"""href\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
-_PHP_RE = re.compile(r"""[\w./-]+\.php(?:\?[^"'\s<>\\)]*)?""")
 
-KEYWORDS = ("calend", "evenement", "événement", "event", "particip", "planning")
-# Lecture seule : on ne suit jamais un lien qui pourrait agir ou télécharger.
-FORBIDDEN = (
-    "logout", "deconn", "déconn", "delete", "suppr", "inscri", "save",
-    "del_", "action=", "export", "pdf", "xls", "ical", "javascript:", "mailto:",
-)
-MAX_PAGES = 6
-CHUNK = 6000
-MAX_CHUNKS = 40
+# Pages de consultation uniquement.
+ALLOWED_SCRIPTS = {
+    "index_d.php",
+    "upd_personnel.php",
+    "evenement_choice.php",
+    "evenement_display.php",
+    "calendar.php",
+    "qualifications.php",
+}
+FORBIDDEN_QUERY = ("action", "delete", "del", "save", "suppr", "confirm", "valid")
+
+
+def safe_url(path: str) -> str:
+    """Valide un chemin relatif et retourne l'URL complète, ou lève ValueError."""
+    base = URL(BASE_URL)
+    target = base.join(URL(path.strip()))
+    if target.scheme != "https" or target.host != base.host:
+        raise ValueError("Hôte non autorisé")
+    if target.name not in ALLOWED_SCRIPTS:
+        raise ValueError(f"Page non autorisée : {target.name}")
+    for key in target.query:
+        if any(word in key.lower() for word in FORBIDDEN_QUERY):
+            raise ValueError(f"Paramètre non autorisé : {key}")
+    return str(target.with_fragment(None))
 
 
 def _clean(page: str) -> str:
     page = _HEAD_RE.sub("", page)
     page = _SCRIPT_RE.sub("", page)
     page = _COMMENT_RE.sub("", page)
+    page = _STYLE_ATTR_RE.sub("", page)
     return _WS_RE.sub(" ", page).strip()
 
 
-def summarize(page: str, url: str, status: int = 200) -> dict:
-    title = _TITLE_RE.search(page)
+def _links(page: str) -> list[dict]:
     links: list[dict] = []
     seen: set[str] = set()
     for attrs, inner in _A_RE.findall(page):
@@ -58,57 +71,22 @@ def summarize(page: str, url: str, status: int = 200) -> dict:
         seen.add(target)
         text = _WS_RE.sub(" ", html_lib.unescape(_TAG_RE.sub(" ", inner))).strip()
         links.append({"href": target, "text": text[:80]})
+    return links[:300]
+
+
+def page_slice(
+    page: str, url: str, status: int, offset: int, length: int, links: bool
+) -> dict:
+    title = _TITLE_RE.search(page)
     cleaned = _clean(page)
-    chunks = [cleaned[i : i + CHUNK] for i in range(0, len(cleaned), CHUNK)]
-    return {
+    result = {
         "url": url,
         "status": status,
         "title": html_lib.unescape(title.group(1)).strip() if title else None,
-        "raw_size": len(page),
         "clean_size": len(cleaned),
-        "links": links[:300],
-        "php_refs": sorted({html_lib.unescape(m) for m in _PHP_RE.findall(page)})[:300],
-        "chunk_count": len(chunks),
-        "html_chunks": chunks[:MAX_CHUNKS],
+        "offset": offset,
+        "html": cleaned[offset : offset + length],
     }
-
-
-def _candidates(summary: dict) -> list[str]:
-    base = URL(summary["url"])
-    found: list[str] = []
-    refs = [(link["href"], link["text"]) for link in summary["links"]]
-    refs += [(ref, "") for ref in summary["php_refs"]]
-    for href, text in refs:
-        probe = f"{href} {text}".lower()
-        if not any(word in probe for word in KEYWORDS):
-            continue
-        if any(word in probe for word in FORBIDDEN):
-            continue
-        try:
-            target = base.join(URL(href))
-        except (ValueError, TypeError):
-            continue
-        if target.host != base.host or target.scheme != "https":
-            continue
-        target_str = str(target.with_fragment(None))
-        if target_str not in found:
-            found.append(target_str)
-    return found[:MAX_PAGES]
-
-
-async def collect_debug(client, page: str, url: str) -> dict:
-    """Ne lève jamais : le diagnostic ne doit pas casser l'actualisation."""
-    result: dict = {"landing": None, "pages": [], "errors": []}
-    try:
-        landing = summarize(page, url)
-        result["landing"] = landing
-        for target in _candidates(landing):
-            try:
-                status, body, final_url = await client.fetch(target)
-                result["pages"].append(summarize(body, final_url, status))
-            except Exception as err:  # noqa: BLE001
-                result["errors"].append(f"{target}: {err!r}")
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.debug("Diagnostic e-Protec impossible", exc_info=True)
-        result["errors"].append(repr(err))
+    if links:
+        result["links"] = _links(page)
     return result
