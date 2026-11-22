@@ -21,7 +21,10 @@ type EProtecConfigEntry = ConfigEntry[EProtecCoordinator]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: EProtecConfigEntry) -> bool:
+    # Session propre au compte (cookies séparés), fermée au déchargement pour
+    # ne pas en accumuler à chaque rechargement de l'intégration.
     session = async_create_clientsession(hass)
+    entry.async_on_unload(session.close)
     client = EProtecClient(
         session, entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD]
     )

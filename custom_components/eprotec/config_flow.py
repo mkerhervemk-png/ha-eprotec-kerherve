@@ -31,9 +31,9 @@ class EProtecConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def _validate(self, username: str, password: str) -> str | None:
-        client = EProtecClient(
-            async_create_clientsession(self.hass), username, password
-        )
+        # Session jetable (cookies propres à ce test), fermée juste après.
+        session = async_create_clientsession(self.hass, auto_cleanup=False)
+        client = EProtecClient(session, username, password)
         try:
             await client.login()
         except EProtecAuthError:
@@ -42,6 +42,8 @@ class EProtecConfigFlow(ConfigFlow, domain=DOMAIN):
             return "mfa_required"
         except EProtecError:
             return "cannot_connect"
+        finally:
+            await session.close()
         return None
 
     async def async_step_user(
