@@ -5,7 +5,7 @@ Intégration Home Assistant non officielle pour e-Protec, l'espace bénévole de
 ## Principes
 
 - **Lecture seule** : aucune inscription ni désinscription à une mission.
-- **1 connexion par compte et par 24 h**, à heure fixe, plus un bouton « Actualiser ».
+- **1 connexion par compte et par 24 h**, à heure fixe. La règle des 24 h concerne le cycle automatique et le démarrage ; le bouton « Actualiser » permet une actualisation manuelle anticipée.
 - **Aucune relance automatique** en cas d'échec de connexion.
 - Les dernières données (60 jours passés et tout le futur) sont conservées localement : un redémarrage de Home Assistant ne déclenche pas de nouvelle connexion si la dernière a moins de 24 h.
 - Les identifiants restent dans Home Assistant et ne figurent jamais dans ce dépôt.
