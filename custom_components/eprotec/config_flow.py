@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
 from .api import EProtecAuthError, EProtecClient, EProtecError, EProtecMfaRequired
 from .const import CONF_HEURE, CONF_PRENOM, DEFAULT_HEURE, DOMAIN
@@ -18,13 +19,13 @@ USER_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_PRENOM): str,
         vol.Required(CONF_USERNAME): str,
-        vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_PASSWORD): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
         vol.Required(CONF_HEURE, default=DEFAULT_HEURE): vol.All(
             vol.Coerce(int), vol.Range(min=0, max=23)
         ),
     }
 )
-REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_PASSWORD): str})
+REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_PASSWORD): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))})
 
 
 class EProtecConfigFlow(ConfigFlow, domain=DOMAIN):
